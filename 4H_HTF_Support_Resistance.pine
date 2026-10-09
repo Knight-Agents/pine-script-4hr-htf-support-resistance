@@ -1,83 +1,70 @@
-// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © Knight-Agents
-// Pine Script v5
-// 4H HTF Support / Resistance Rays with color flip on 4H close confirmation
-
 //@version=5
-indicator("4H HTF Ray Zones", overlay=true, max_lines_count=500, max_labels_count=500)
+indicator("4H HTF Support/Resistance Rays", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ---------------------------
 // Inputs
 // ---------------------------
-htfTimeframe = input.timeframe("240", "HTF timeframe")
-minTouches = input.int(2, "Min touches for pivot confirmation", minval=1)
-showLabels = input.bool(true, "Show labels")
+htf = input.timeframe("240", "Higher Timeframe")
+showLabels = input.bool(true, "Show Labels")
+resistanceColor = input.color(color.red, "Resistance Color")
+supportColor = input.color(color.cyan, "Support Color")
 
 // ---------------------------
-// HTF data
+// HTF Data
 // ---------------------------
-htfHigh = request.security(syminfo.tickerid, htfTimeframe, high, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
-htfLow  = request.security(syminfo.tickerid, htfTimeframe, low, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
-htfClose = request.security(syminfo.tickerid, htfTimeframe, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
-htfOpen = request.security(syminfo.tickerid, htfTimeframe, open, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+htfHigh = request.security(syminfo.tickerid, htf, high, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+htfLow  = request.security(syminfo.tickerid, htf, low, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+htfClose = request.security(syminfo.tickerid, htf, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+htfOpen = request.security(syminfo.tickerid, htf, open, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
 
 // ---------------------------
-// 4H pivot detection
+// Pivot Detection
 // ---------------------------
 r4 = ta.pivothigh(htfHigh, 2, 2)
 s4 = ta.pivotlow(htfLow, 2, 2)
 
 // ---------------------------
-// Arrays for dynamic storage
+// Arrays
 // ---------------------------
 var line[] resLines = array.new_line()
 var line[] supLines = array.new_line()
-var label[] resLabels = array.new_label()
-var label[] supLabels = array.new_label()
 var float[] resVals = array.new_float()
 var float[] supVals = array.new_float()
-var int[] resTouches = array.new_int()
-var int[] supTouches = array.new_int()
 
 // ---------------------------
-// Helper functions
+// Add Resistance
 // ---------------------------
-f_addResistance(level, x) =>
-    // Check if level already exists (avoid duplicates)
+f_addResistance(float level, int x) =>
     exists = false
     for i = 0 to array.size(resVals) - 1
         if math.abs(level - array.get(resVals, i)) < syminfo.mintick * 50
             exists := true
             break
-    
     if not exists
-        lineId = line.new(x, level, x + 500, level, extend=extend.right, color=color.red, style=line.style_solid, width=2)
-        array.push(resLines, lineId)
+        ln = line.new(x, level, x + 500, level, extend=extend.right, color=resistanceColor, style=line.style_solid, width=2)
+        array.push(resLines, ln)
         array.push(resVals, level)
-        array.push(resTouches, 1)
         if showLabels
-            lblId = label.new(x + 10, level, "4H R: " + str.tostring(level, format.price), style=label.style_label_left, color=color.new(color.red, 0), textcolor=color.white, size=size.tiny)
-            array.push(resLabels, lblId)
+            label.new(x + 10, level, "HTF R: " + str.tostring(level, format.price), style=label.style_label_left, color=color.new(resistanceColor, 0), textcolor=color.white, size=size.tiny)
 
-f_addSupport(level, x) =>
-    // Check if level already exists (avoid duplicates)
+// ---------------------------
+// Add Support
+// ---------------------------
+f_addSupport(float level, int x) =>
     exists = false
     for i = 0 to array.size(supVals) - 1
         if math.abs(level - array.get(supVals, i)) < syminfo.mintick * 50
             exists := true
             break
-    
     if not exists
-        lineId = line.new(x, level, x + 500, level, extend=extend.right, color=color.cyan, style=line.style_solid, width=2)
-        array.push(supLines, lineId)
+        ln = line.new(x, level, x + 500, level, extend=extend.right, color=supportColor, style=line.style_solid, width=2)
+        array.push(supLines, ln)
         array.push(supVals, level)
-        array.push(supTouches, 1)
         if showLabels
-            lblId = label.new(x + 10, level, "4H S: " + str.tostring(level, format.price), style=label.style_label_left, color=color.new(color.cyan, 0), textcolor=color.black, size=size.tiny)
-            array.push(supLabels, lblId)
+            label.new(x + 10, level, "HTF S: " + str.tostring(level, format.price), style=label.style_label_left, color=color.new(supportColor, 0), textcolor=color.black, size=size.tiny)
 
 // ---------------------------
-// Add new pivot levels
+// Add Pivots
 // ---------------------------
 if barstate.isconfirmed
     if not na(r4)
@@ -86,53 +73,41 @@ if barstate.isconfirmed
         f_addSupport(s4, bar_index)
 
 // ---------------------------
-// Update color logic and track touches
+// Update Resistance Lines
 // ---------------------------
-// For resistance lines:
-// default = red
-// turn cyan when 4H body closes above the line and trend continues higher
 for i = 0 to array.size(resLines) - 1
     lvl = array.get(resVals, i)
-    lineId = array.get(resLines, i)
+    ln = array.get(resLines, i)
     
-    // Count touches (price touches but rejects)
-    if htfHigh >= lvl and htfClose < lvl
-        array.set(resTouches, i, array.get(resTouches, i) + 1)
-    
-    // Color change: cyan when body closes ABOVE and continues up
+    // Color change: Cyan when body closes ABOVE and continues up
     if htfClose > lvl and htfClose[1] <= lvl and htfClose > htfOpen
-        line.set_color(lineId, color.cyan)
-    // Back to red if price returns below
+        line.set_color(ln, supportColor)
+    // Back to Red if price returns below
     else if htfClose <= lvl
-        line.set_color(lineId, color.red)
+        line.set_color(ln, resistanceColor)
     
-    line.set_x1(lineId, bar_index - 500)
-    line.set_x2(lineId, bar_index + 500)
+    line.set_x1(ln, bar_index - 500)
+    line.set_x2(ln, bar_index + 500)
 
-// For support lines:
-// default = cyan
-// turn red when 4H body closes below the line and trend continues lower
+// ---------------------------
+// Update Support Lines
+// ---------------------------
 for i = 0 to array.size(supLines) - 1
     lvl = array.get(supVals, i)
-    lineId = array.get(supLines, i)
+    ln = array.get(supLines, i)
     
-    // Count touches (price touches but rejects)
-    if htfLow <= lvl and htfClose > lvl
-        array.set(supTouches, i, array.get(supTouches, i) + 1)
-    
-    // Color change: red when body closes BELOW and continues down
+    // Color change: Red when body closes BELOW and continues down
     if htfClose < lvl and htfClose[1] >= lvl and htfClose < htfOpen
-        line.set_color(lineId, color.red)
-    // Back to cyan if price returns above
+        line.set_color(ln, resistanceColor)
+    // Back to Cyan if price returns above
     else if htfClose >= lvl
-        line.set_color(lineId, color.cyan)
+        line.set_color(ln, supportColor)
     
-    line.set_x1(lineId, bar_index - 500)
-    line.set_x2(lineId, bar_index + 500)
+    line.set_x1(ln, bar_index - 500)
+    line.set_x2(ln, bar_index + 500)
 
 // ---------------------------
-// Debug info (optional)
+// Debug Markers
 // ---------------------------
-if barstate.isconfirmed
-    plotchar(not na(r4), "Resistance Pivot", "▼", location.abovebar, color.red, size=size.small)
-    plotchar(not na(s4), "Support Pivot", "▲", location.belowbar, color.cyan, size=size.small)
+plotchar(not na(r4), "Resistance Pivot", "▼", location.abovebar, resistanceColor, size=size.small)
+plotchar(not na(s4), "Support Pivot", "▲", location.belowbar, supportColor, size=size.small)
