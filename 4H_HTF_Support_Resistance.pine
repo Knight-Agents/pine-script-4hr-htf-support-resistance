@@ -23,7 +23,6 @@ confirmBars = input.int(3, "Confirmation Bars After Pivot", minval=1, maxval=10)
 // ---------------------------
 maxBarsToKeep = input.int(500, "Max Bars to Keep Line", minval=100, maxval=2000)
 minDistanceTicks = input.int(100, "Min Distance Between Zones (ticks)", minval=10, maxval=500)
-consolidationPercent = input.float(0.3, "Consolidation Zone Width (%)", minval=0.1, maxval=1.0, step=0.1)
 
 // ---------------------------
 // INPUTS - Rejection & Color
@@ -44,7 +43,6 @@ htfLow  = request.security(syminfo.tickerid, htf, low, gaps=barmerge.gaps_off, l
 htfClose = request.security(syminfo.tickerid, htf, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
 htfOpen = request.security(syminfo.tickerid, htf, open, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
 htfVolume = request.security(syminfo.tickerid, htf, volume, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
-htfRange = htfHigh - htfLow
 
 // ---------------------------
 // PIVOT DETECTION
@@ -79,25 +77,15 @@ var int[] resConfirm = array.new_int()
 var int[] supConfirm = array.new_int()
 
 // ---------------------------
-// HELPER: Format Label
-// ---------------------------
-f_formatLabel(float level, string zoneType) =>
-    if labelStyle == "Price"
-        str.tostring(level, format.price)
-    else if labelStyle == "Zone Name"
-        zoneType
-    else
-        zoneType + "\n" + str.tostring(level, format.price)
-
-// ---------------------------
 // HELPER: Check Proximity
 // ---------------------------
 f_isNearExisting(float level, array<float> existing) =>
     minDist = syminfo.mintick * minDistanceTicks
+    result = false
     for i = 0 to array.size(existing) - 1
         if math.abs(level - array.get(existing, i)) < minDist
-            return true
-    false
+            result := true
+    result
 
 // ---------------------------
 // HELPER: Add Resistance
@@ -112,9 +100,8 @@ f_addResistance(float level, int x, float strength) =>
         array.push(resIsBroken, false)
         array.push(resStrength, strength)
         array.push(resConfirm, 0)
-        
         if showLabels
-            lblText = f_formatLabel(level, "4H R")
+            lblText = "4H R: " + str.tostring(level, format.price)
             label.new(x + labelOffset, level, lblText, style=label.style_label_left, color=color.new(resColor, 0), textcolor=color.white, size=size.tiny, xloc=xloc.bar_index)
 
 // ---------------------------
@@ -130,9 +117,8 @@ f_addSupport(float level, int x, float strength) =>
         array.push(supIsBroken, false)
         array.push(supStrength, strength)
         array.push(supConfirm, 0)
-        
         if showLabels
-            lblText = f_formatLabel(level, "4H S")
+            lblText = "4H S: " + str.tostring(level, format.price)
             label.new(x + labelOffset, level, lblText, style=label.style_label_left, color=color.new(supColor, 0), textcolor=color.black, size=size.tiny, xloc=xloc.bar_index)
 
 // ---------------------------
@@ -142,7 +128,6 @@ if barstate.isconfirmed
     if not na(pivotHigh) and pivotHighStrength >= minPivotStrength
         if not minVolume or highVolume
             f_addResistance(pivotHigh, bar_index, pivotHighStrength)
-    
     if not na(pivotLow) and pivotLowStrength >= minPivotStrength
         if not minVolume or highVolume
             f_addSupport(pivotLow, bar_index, pivotLowStrength)
@@ -175,7 +160,6 @@ if mode == "Latest"
         array.resize(resIsBroken, 1)
         array.resize(resStrength, 1)
         array.resize(resConfirm, 1)
-    
     if array.size(supVals) > 1
         for i = 0 to array.size(supVals) - 2
             ln = array.get(supLines, i)
@@ -207,7 +191,6 @@ if mode != "Latest"
             array.remove(resConfirm, i)
         else
             i += 1
-    
     i = 0
     while i < array.size(supLines)
         barsAge = bar_index - array.get(supBarCreated, i)
@@ -231,7 +214,6 @@ for i = 0 to array.size(resLines) - 1
     lvl = array.get(resVals, i)
     ln = array.get(resLines, i)
     isBroken = array.get(resIsBroken, i)
-    strength = array.get(resStrength, i)
     confirmed = array.get(resConfirm, i) >= confirmBars
 
     if mode == "Rejection Count"
@@ -240,7 +222,6 @@ for i = 0 to array.size(resLines) - 1
             if count > turnThreshold
                 count := turnThreshold
             array.set(resTouch, i, count)
-
         if array.get(resTouch, i) >= turnThreshold and htfClose < lvl and confirmed
             line.set_color(ln, supColorActive)
             array.set(resIsBroken, i, true)
@@ -261,7 +242,6 @@ for i = 0 to array.size(resLines) - 1
                 line.set_color(ln, resColor)
             else
                 line.set_color(ln, resColorWeak)
-
     line.set_x1(ln, bar_index - 2000)
     line.set_x2(ln, bar_index + 2000)
 
@@ -272,7 +252,6 @@ for i = 0 to array.size(supLines) - 1
     lvl = array.get(supVals, i)
     ln = array.get(supLines, i)
     isBroken = array.get(supIsBroken, i)
-    strength = array.get(supStrength, i)
     confirmed = array.get(supConfirm, i) >= confirmBars
 
     if mode == "Rejection Count"
@@ -281,7 +260,6 @@ for i = 0 to array.size(supLines) - 1
             if count > turnThreshold
                 count := turnThreshold
             array.set(supTouch, i, count)
-
         if array.get(supTouch, i) >= turnThreshold and htfClose > lvl and confirmed
             line.set_color(ln, resColorActive)
             array.set(supIsBroken, i, true)
@@ -302,7 +280,6 @@ for i = 0 to array.size(supLines) - 1
                 line.set_color(ln, supColor)
             else
                 line.set_color(ln, supColorWeak)
-
     line.set_x1(ln, bar_index - 2000)
     line.set_x2(ln, bar_index + 2000)
 
